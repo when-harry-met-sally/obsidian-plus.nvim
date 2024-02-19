@@ -7,6 +7,22 @@ local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 local sorters = require("telescope.sorters")
 
+local previewer = previewers.new_buffer_previewer({
+	define_preview = function(self, entry)
+		-- Check if the entry is the "Create New File" option
+		if entry.value:match("^Create New File:") then
+			-- Set preview to empty for "Create New File" option
+			return
+		else
+			-- Use the default previewer for files
+			previewers.buffer_previewer_maker(entry.value, self.state.bufnr, {
+				bufname = self.state.bufname,
+				winid = self.state.winid,
+			})
+		end
+	end,
+})
+
 local function getDirectoryName(path)
 	-- Pattern explanation:
 	-- .*/ matches everything up to the last slash
@@ -80,6 +96,7 @@ local function fuzzyFindFilesAndCreate(directory)
 			finder = finders.new_dynamic({
 				fn = finder,
 			}),
+			previewer = previewer,
 			sorter = sorters.get_generic_fuzzy_sorter(),
 			attach_mappings = function(prompt_bufnr, map)
 				map("i", "<CR>", function(bufnr)
