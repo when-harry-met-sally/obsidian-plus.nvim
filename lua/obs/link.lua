@@ -76,23 +76,23 @@ local function createFileIfNotExists(directory, input)
 	end
 end
 
+-- Assuming slugify and createFileIfNotExists functions are defined elsewhere
+
 local function fuzzyFindFilesAndCreate(directory)
-	local origBuf = getCurrentBuf() -- Capture the original buffer
-	local origCursorPos = getCursorPos()
+	local origBuf = vim.api.nvim_get_current_buf() -- Capture the original buffer
+	local origCursorPos = vim.api.nvim_win_get_cursor(0)
 	local input = nil -- Variable to capture the user's input
 
-	-- Custom finder that prepends the search query to the list of files
+	-- Custom finder
 	local finder = setmetatable({}, {
 		__call = function(_, prompt)
 			if not input or input ~= prompt then
-				input = prompt -- Update the captured input with the current prompt
+				input = prompt -- Update the captured input
 				local files = {}
 				if prompt ~= "" then
-					-- Prepend the search query as a 'Create New File: <query>' option
 					table.insert(files, "Create New File: " .. prompt)
 				end
-				-- List files in the directory and append to the list
-				for _, file in ipairs(scandir.scan_dir(directory, { hidden = true, add_dirs = true })) do
+				for _, file in ipairs(vim.fn.readdir(directory)) do
 					table.insert(files, file)
 				end
 				return files
@@ -100,35 +100,49 @@ local function fuzzyFindFilesAndCreate(directory)
 		end,
 	})
 
-	pickers
+	require("telescope.pickers")
 		.new({}, {
 			prompt_title = "Find File or Create New",
-			finder = finders.new_dynamic({
+			finder = require("telescope.finders").new_dynamic({
 				fn = finder,
 			}),
-			previewer = previewer,
-			sorter = sorters.get_generic_fuzzy_sorter(),
+			sorter = require("telescope.sorters").get_generic_fuzzy_sorter(),
 			attach_mappings = function(prompt_bufnr, map)
-				map("i", "<CR>", function(bufnr)
-					local selection = action_state.get_selected_entry()
-					actions.close(bufnr)
+				require("telescope.actions").select_default:replace(function()
+					local selection = require("telescope.actions.state").get_selected_entry()
+					require("telescope.actions").close(prompt_bufnr)
 
-					local filepath
-					-- Handle selection or input for file creation
+					local filepath, queryWasUsedForCreation = "", false
 					if selection.value:match("^Create New File:") then
 						local query = selection.value:gsub("Create New File: ", "")
 						filepath = directory .. "/" .. slugify(query) .. ".md"
-						if not Path:new(filepath):exists() then
-							createFileIfNotExists(directory, query)
-						end
+						queryWasUsedForCreation = not vim.loop.fs_stat(filepath)
+						createFileIfNotExists(directory, query)
+						vim.cmd("write") -- Save the newly created file
 					else
-						filepath = selection.value
+						filepath = directory .. "/" .. selection.value
 					end
+
 					vim.api.nvim_set_current_buf(origBuf)
 					vim.api.nvim_win_set_cursor(0, origCursorPos)
-					-- Insert the filepath. Adjust how the path is inserted based on your needs (e.g., markdown link format)
 					local row, col = unpack(origCursorPos)
-					vim.api.nvim_buf_set_text(origBuf, row - 1, col, row - 1, col, { filepath })
+
+					local filenameWithoutExt = filepath:match("([^/]+)%.%w+$")
+					if not queryWasUsedForCreation then
+						-- Insert format: [[fileNameWithoutExt]]
+						linkFormat = "[[" .. filenameWithoutExt .. "]]"
+						vim.api.nvim_buf_set_text(origBuf, row - 1, col, row - 1, col, { linkFormat })
+						-- Cursor should be placed right after the second ]
+						vim.api.nvim_win_set_cursor(0, { row, col + #linkFormat })
+					else
+						-- Insert format: [[fileNameWithoutExt|input]]
+						linkFormat = "[[" .. filenameWithoutExt .. "|" .. input .. "]]"
+						vim.api.nvim_buf_set_text(origBuf, row - 1, col, row - 1, col, { linkFormat })
+						-- Cursor should be placed right after the second ], which is the end of the linkFormat
+						vim.api.nvim_win_set_cursor(0, { row, col + #linkFormat })
+					end
+					-- Enter insert mode after placing the cursor
+					vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("i", true, false, true), "n", true)
 				end)
 				return true
 			end,
