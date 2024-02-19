@@ -7,6 +7,14 @@ local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 local sorters = require("telescope.sorters")
 
+local function getCursorPos()
+	return vim.api.nvim_win_get_cursor(0) -- Returns a tuple {row, col}
+end
+
+local function getCurrentBuf()
+	return vim.api.nvim_get_current_buf()
+end
+
 local previewer = previewers.new_buffer_previewer({
 	define_preview = function(self, entry)
 		-- Check if the entry is the "Create New File" option
@@ -69,6 +77,8 @@ local function createFileIfNotExists(directory, input)
 end
 
 local function fuzzyFindFilesAndCreate(directory)
+	local origBuf = getCurrentBuf() -- Capture the original buffer
+	local origCursorPos = getCursorPos()
 	local input = nil -- Variable to capture the user's input
 
 	-- Custom finder that prepends the search query to the list of files
@@ -102,15 +112,23 @@ local function fuzzyFindFilesAndCreate(directory)
 				map("i", "<CR>", function(bufnr)
 					local selection = action_state.get_selected_entry()
 					actions.close(bufnr)
+
+					local filepath
 					-- Handle selection or input for file creation
 					if selection.value:match("^Create New File:") then
 						local query = selection.value:gsub("Create New File: ", "")
-						if createFileIfNotExists(directory, query) then
-							vim.cmd(":edit " .. directory .. "/" .. slugify(query) .. ".md")
+						filepath = directory .. "/" .. slugify(query) .. ".md"
+						if not Path:new(filepath):exists() then
+							createFileIfNotExists(directory, query)
 						end
 					else
-						vim.cmd(":edit " .. selection.value)
+						filepath = selection.value
 					end
+					vim.api.nvim_set_current_buf(origBuf)
+					vim.api.nvim_win_set_cursor(0, origCursorPos)
+					-- Insert the filepath. Adjust how the path is inserted based on your needs (e.g., markdown link format)
+					local row, col = unpack(origCursorPos)
+					vim.api.nvim_buf_set_text(origBuf, row - 1, col, row - 1, col, { filepath })
 				end)
 				return true
 			end,
