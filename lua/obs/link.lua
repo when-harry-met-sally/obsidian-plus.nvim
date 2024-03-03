@@ -42,17 +42,18 @@ local function getDirectories(baseDir)
 end
 
 local function createFileIfNotExists(directory, input)
-	local filename = slugify(input) .. ".md"
+	local slug = slugify(input)
+	local filename = slug .. ".md"
 	local filePath = Path:new(directory, filename):absolute()
 
 	if Path:new(filePath):exists() then
 		print("File already exists. Aborting.")
-		return filePath, false
+		return filePath, false, slug -- Notice we return slug here as well
 	else
 		local header = "# " .. input
 		Path:new(filePath):write(header, "w")
 		print("Note created: " .. filePath)
-		return filePath, true
+		return filePath, true, slug -- And here
 	end
 end
 
@@ -71,21 +72,20 @@ end
 local function fuzzyFindFilesAndCreate(directory)
 	local origBuf = vim.api.nvim_get_current_buf()
 	local origCursorPos = vim.api.nvim_win_get_cursor(0)
-	local input = nil
 
 	local finder = setmetatable({}, {
 		__call = function(_, prompt)
-			if not input or input ~= prompt then
-				input = prompt
-				local files = {}
-				if prompt ~= "" then
-					table.insert(files, "Create New File: " .. prompt)
-				end
-				for _, file in ipairs(vim.fn.readdir(directory)) do
-					table.insert(files, file)
-				end
-				return files
+			local files = {}
+			-- Ensure prompt is never nil
+			prompt = prompt or ""
+			if prompt ~= "" then
+				table.insert(files, "Create New File: " .. prompt)
 			end
+			local readdirFiles = vim.fn.readdir(directory)
+			for _, file in ipairs(readdirFiles) do
+				table.insert(files, file)
+			end
+			return files
 		end,
 	})
 
@@ -97,27 +97,35 @@ local function fuzzyFindFilesAndCreate(directory)
 			attach_mappings = function(prompt_bufnr, map)
 				actions.select_default:replace(function()
 					local selection = action_state.get_selected_entry()
-					actions.close(prompt_bufnr)
+					actions.close(prompt_bufnr) -- Ensure actions.close is called before modifying the buffer or cursor
 
-					-- Check if the selection is for creating a new file and adjust `input` accordingly
-					local createNewFilePrefix = "Create New File: "
-					if selection.value:match("^" .. createNewFilePrefix) then
-						input = selection.value:sub(#createNewFilePrefix + 1)
-					else
-						input = selection.value
-					end
-
-					local filepath, wasCreated = createFileIfNotExists(directory, input)
-					if wasCreated then
-						local templateName = getTemplateForNewFile(filepath)
-						if templateName then
-							local bufnr = vim.fn.bufadd(filepath)
-							vim.api.nvim_buf_call(bufnr, function()
-								vim.cmd("ObsidianTemplate " .. templateName)
-							end)
-						else
-							print("No matching template found for the new file.")
+					if selection.value:match("^Create New File: ") then
+						local input = selection.value:sub(#"Create New File: " + 1)
+						local filepath, wasCreated, slug = createFileIfNotExists(directory, input)
+						if wasCreated then
+							vim.api.nvim_buf_set_text(
+								origBuf,
+								origCursorPos[1] - 1,
+								origCursorPos[2],
+								origCursorPos[1] - 1,
+								origCursorPos[2],
+								{ "[[" .. slug .. "|" .. input .. "]] " }
+							)
+							vim.api.nvim_win_set_cursor(0, { origCursorPos[1], origCursorPos[2] + #slug + #input + 4 }) -- Cursor after the final ']' with a space
+							vim.cmd("split " .. filepath) -- Open the new file in a split window
 						end
+					else
+						-- Handle existing file selection
+						local slug = vim.fn.fnamemodify(selection.value, ":t:r")
+						vim.api.nvim_buf_set_text(
+							origBuf,
+							origCursorPos[1] - 1,
+							origCursorPos[2],
+							origCursorPos[1] - 1,
+							origCursorPos[2],
+							{ "[[" .. slug .. "]]" }
+						)
+						vim.api.nvim_win_set_cursor(0, { origCursorPos[1], origCursorPos[2] + #slug + 3 }) -- Cursor immediately after the first ']'
 					end
 				end)
 				return true
