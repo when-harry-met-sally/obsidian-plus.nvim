@@ -1,4 +1,4 @@
-local obsLink = require("obs.link")
+local obsLink = require("obsidian-plus.link")
 
 local M = {}
 
