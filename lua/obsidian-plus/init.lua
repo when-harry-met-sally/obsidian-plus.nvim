@@ -1,4 +1,5 @@
 local obsLink = require("obsidian-plus.link")
+local obsMassCheckbox = require("obsidian-plus.mass-checkbox")
 
 local M = {}
 
@@ -19,6 +20,10 @@ end
 
 function M.test()
 	obsLink.selectDirectoryAndCreateNote()
+end
+
+function M.test2()
+	obsMassCheckbox.runCommandOnSelectedLines()
 end
 
 return M
