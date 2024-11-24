@@ -50,7 +50,7 @@ local function createFileIfNotExists(directory, input)
 		print("File already exists. Aborting.")
 		return filePath, false, slug -- Notice we return slug here as well
 	else
-		local header = "---\n" .. "aliases:\n" .. "- " .. input .. "\n" .. "---\n" .. "# " .. input
+		local header = "---\n" .. "aliases:\n" .. "- " .. input .. "\n" .. "---\n" .. "# " .. input .. "\n"
 
 		Path:new(filePath):write(header, "w")
 		print("Note created: " .. filePath)
@@ -113,7 +113,7 @@ local function fuzzyFindFilesAndCreate(directory)
 								{ "[[" .. slug .. "|" .. input .. "]] " }
 							)
 							vim.api.nvim_win_set_cursor(0, { origCursorPos[1], origCursorPos[2] + #slug + #input + 4 }) -- Cursor after the final ']' with a space
-							vim.cmd("split " .. filepath) -- Open the new file in a split window
+							vim.cmd("split " .. filepath .. " | normal G")
 						end
 					else
 						-- Handle existing file selection
