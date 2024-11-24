@@ -50,7 +50,8 @@ local function createFileIfNotExists(directory, input)
 		print("File already exists. Aborting.")
 		return filePath, false, slug -- Notice we return slug here as well
 	else
-		local header = "# " .. input
+		local header = "---\n" .. "alias:\n" .. "- " .. input .. "\n" .. "---\n" .. "# " .. input
+
 		Path:new(filePath):write(header, "w")
 		print("Note created: " .. filePath)
 		return filePath, true, slug -- And here
